@@ -1,0 +1,16 @@
+{
+  "name": "automacao-iot",
+  "version": "1.0.0",
+  "description": "Sistema de Automação IoT - ESP32 + API + Dashboard",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "keywords": ["iot", "esp32", "automation", "sensors"],
+  "author": "Sua Equipe"
+}

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard IoT - Automação</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Dashboard IoT - Automação</h1>
+            <span id="statusIndicator" class="status-indicator">Offline</span>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Temperatura -->
+            <div class="card">
+                <div class="card-title">🌡️ Temperatura</div>
+                <div class="sensor-value temperature">
+                    <span id="tempValue">--</span>
+                    <span class="sensor-unit">°C</span>
+                </div>
+                <div class="threshold-info">
+                    Limite: <strong id="tempThreshold">30</strong>°C
+                </div>
+                <div id="tempAlert" class="alert" style="display: none;">
+                    Temperatura acima do limite!
+                </div>
+            </div>
+
+            <!-- Umidade -->
+            <div class="card">
+                <div class="card-title">💧 Umidade</div>
+                <div class="sensor-value humidity">
+                    <span id="humidityValue">--</span>
+                    <span class="sensor-unit">%</span>
+                </div>
+                <div class="threshold-info">
+                    Mínimo: <strong id="humidityThreshold">40</strong>%
+                </div>
+                <div id="humidityAlert" class="alert" style="display: none;">
+                    Umidade abaixo do mínimo!
+                </div>
+            </div>
+
+            <!-- Luminosidade -->
+            <div class="card">
+                <div class="card-title">💡 Luminosidade</div>
+                <div class="sensor-value light">
+                    <span id="lightValue">--</span>
+                    <span class="sensor-unit">lux</span>
+                </div>
+                <div class="threshold-info">
+                    Mínimo: <strong id="lightThreshold">500</strong> lux
+                </div>
+                <div id="lightAlert" class="alert" style="display: none;">
+                    Luminosidade baixa!
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel de Controle -->
+        <div class="control-panel">
+            <h3>Configurar Limites</h3>
+            <div class="control-grid">
+                <div class="control-item">
+                    <label for="tempInput">Temperatura Máxima (°C)</label>
+                    <input type="number" id="tempInput" value="30" step="0.1">
+                </div>
+                <div class="control-item">
+                    <label for="humidityInput">Umidade Mínima (%)</label>
+                    <input type="number" id="humidityInput" value="40" step="1">
+                </div>
+                <div class="control-item">
+                    <label for="lightInput">Luminosidade Mínima</label>
+                    <input type="number" id="lightInput" value="500" step="10">
+                </div>
+                <div class="control-item">
+                    <button class="btn" onclick="updateThresholds()">Salvar Limites</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="last-update">
+            Última atualização: <span id="lastUpdate">Nunca</span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
