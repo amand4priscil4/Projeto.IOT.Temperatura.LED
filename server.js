@@ -8,7 +8,7 @@ const PORT = 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static('frontend')); // Servir arquivos do frontend
+app.use(express.static(path.join(__dirname, 'frontend')));
 
 // Dados em memória
 let sensorData = [];
