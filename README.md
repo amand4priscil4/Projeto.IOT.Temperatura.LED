@@ -1,6 +1,6 @@
 # Sistema de Automação IoT - ESP32
 
-Protótipo de automação IoT usando ESP32 com sensores DHT22 (temperatura/umidade) e LDR (luminosidade), integrando regras de automação locais e em nuvem.
+Protótipo de automação IoT usando ESP32 com sensores DHT22 (temperatura/umidade) e LDR (luminosidade), integrando regras de automação locais e em nuvem com arquitetura de microserviços.
 
 ---
 
@@ -26,26 +26,43 @@ Protótipo de automação IoT usando ESP32 com sensores DHT22 (temperatura/umida
 Desenvolver um sistema de automação IoT que demonstra quando faz sentido tomar decisões localmente (no dispositivo) versus centralizadamente (na nuvem), implementando:
 
 1. **Regras locais:** Automação executada diretamente no ESP32
-2. **Integração com API:** Envio de dados e busca de parâmetros atualizados
-3. **Fail-safe:** Sistema continua funcionando mesmo sem conexão com a internet
-4. **Dashboard:** Interface web para visualização e controle remoto
+2. **Integração com ThingSpeak:** Coleta e armazenamento de dados em nuvem
+3. **Arquitetura de microserviços:** Backend separado do Frontend
+4. **Persistência de dados:** MongoDB para histórico de leituras
+5. **Fail-safe:** Sistema continua funcionando mesmo sem conexão com a internet
+6. **Dashboard:** Interface web para visualização e controle remoto
 
 ---
 
 ## Arquitetura do Sistema
 
 ```
-┌─────────────┐         WiFi          ┌──────────────┐
-│   ESP32     │ ◄────────────────────► │  API Node.js │
-│  + Sensores │    POST /sensor-data   │  (Vercel)    │
-│  + LED      │    GET  /thresholds    └──────┬───────┘
-└─────────────┘                               │
-                                              │
-                                        ┌─────▼────────┐
-                                        │  Dashboard   │
-                                        │   Web (UI)   │
-                                        └──────────────┘
+┌─────────────┐
+│   ESP32     │ (Sensores DHT22 + LDR)
+└──────┬──────┘
+       │
+       ├─────────────────────────────────┐
+       │                                 │
+       ▼                                 ▼
+┌─────────────┐                  ┌──────────────┐
+│ ThingSpeak  │                  │ API Frontend │
+│   (Cloud)   │                  │  (Porta 3000)│
+└──────┬──────┘                  └──────┬───────┘
+       │                                 │
+       ▼                                 │
+┌─────────────────────┐                 │
+│   API Backend       │◄────────────────┘
+│ Node.js + MongoDB   │
+│    (Porta 4000)     │
+└─────────────────────┘
 ```
+
+### Fluxo de Dados
+
+1. **ESP32 → ThingSpeak**: Envia leituras dos sensores (temperatura, umidade, luminosidade)
+2. **Backend → ThingSpeak**: Importa dados a cada 1 minuto e armazena no MongoDB
+3. **Frontend → Backend**: Busca dados históricos e estatísticas
+4. **Dashboard → Usuário**: Exibe dados em tempo real com interface web
 
 ### Componentes
 
@@ -58,8 +75,9 @@ Desenvolver um sistema de automação IoT que demonstra quando faz sentido tomar
 
 **Software:**
 - **Firmware:** C++ (Arduino IDE)
-- **Backend:** Node.js + Express
-- **Frontend:** HTML + CSS + JavaScript
+- **Backend API:** Node.js + Express + MongoDB + Mongoose
+- **Frontend API:** Node.js + Express
+- **Dashboard:** HTML + CSS + JavaScript
 - **Deploy:** Vercel (cloud hosting)
 
 ---
@@ -92,286 +110,231 @@ if (temperatura > limite_max ||
 }
 ```
 
-**Integração com API:**
-- Envia leituras dos sensores via POST a cada 10 segundos
-- Busca limites atualizados via GET a cada 30 segundos
-- Mantém valores padrão locais caso a API falhe
+**Integração com ThingSpeak:**
+```cpp
+// Envia dados via HTTP POST
+String url = "https://api.thingspeak.com/update?api_key=";
+url += apiKey;
+url += "&field1=" + String(temperatura);
+url += "&field2=" + String(umidade);
+url += "&field3=" + String(luminosidade);
+```
 
 **Fail-Safe:**
 ```cpp
-if (!apiDisponivel) {
-    // Usar valores padrão
+if (!thingSpeakDisponivel) {
+    // Continua operando com valores padrão locais
     temperatura_max = 30.0;
     umidade_min = 40.0;
     luz_min = 500;
 }
 ```
 
-### 3. Backend (API REST)
+### 3. Backend API (Porta 4000)
 
-Desenvolvemos uma API em Node.js com os seguintes endpoints:
+Desenvolvemos uma API em Node.js que integra ThingSpeak com MongoDB:
 
-**POST /api/sensor-data**
-- Recebe dados dos sensores
-- Armazena em memória (últimas 100 leituras)
-- Retorna confirmação e status de alerta
+**Funcionalidades:**
+- Importa dados do ThingSpeak automaticamente a cada 1 minuto
+- Armazena histórico no MongoDB (evita duplicatas)
+- Expõe endpoints REST para consulta de dados
+- Calcula estatísticas agregadas (médias, máximos, mínimos)
+
+**Endpoints:**
+
+**GET /leituras?limit=50**
+- Retorna últimas N leituras do banco
+- Ordenadas da mais recente para a mais antiga
+- Exemplo: `http://localhost:4000/leituras?limit=100`
+
+**GET /ultima**
+- Retorna a leitura mais recente
+- Útil para exibir dados em tempo real
+
+**GET /estatisticas**
+- Retorna estatísticas das últimas 24 horas
+- Médias de temperatura, umidade e luminosidade
+- Valores máximos e mínimos
+
+**GET /status**
+- Verifica saúde da API e conexão MongoDB
+- Retorna total de leituras armazenadas
+
+**Tecnologias:**
+- Express.js (framework web)
+- Mongoose (ODM para MongoDB)
+- Axios (requisições HTTP)
+- CORS (comunicação entre APIs)
+
+### 4. Frontend API (Porta 3000)
+
+API intermediária que serve o dashboard e processa lógica de negócio:
+
+**Responsabilidades:**
+- Servir arquivos estáticos (HTML, CSS, JS)
+- Buscar dados do Backend (porta 4000)
+- Gerenciar thresholds (limites de alerta)
+- Formatar dados para o dashboard
+- Calcular alertas baseados nos limites configurados
+
+**Endpoints:**
+
+**GET /api/sensor-data?limit=50**
+- Busca dados do backend MongoDB
+- Formata para o padrão esperado pelo dashboard
+- Adiciona campo `alert` baseado nos thresholds
+
+**GET /api/dashboard**
+- Retorna dados resumidos para exibição
+- Última leitura + estatísticas 24h
+- Inclui thresholds configurados
 
 **GET /api/thresholds**
-- Retorna os limites configurados
-- Permite que o ESP32 sincronize parâmetros
+- Retorna limites configurados
+- Temperatura máxima, umidade mínima, luz mínima
 
 **PUT /api/thresholds**
 - Atualiza limites remotamente
 - Permite ajuste fino sem reprogramar o dispositivo
 
-**GET /api/dashboard**
-- Retorna dados resumidos para o dashboard
-- Inclui estatísticas das últimas 24 horas
+**GET /api/status**
+- Verifica saúde do frontend e backend
+- Útil para diagnóstico de problemas
 
-### 4. Frontend (Dashboard Web)
+### 5. Dashboard Web
 
-Criamos uma interface web responsiva com:
+Interface web responsiva com atualização em tempo real:
 
-**Visualização em tempo real:**
-- Cards mostrando temperatura, umidade e luminosidade
+**Funcionalidades:**
+- Exibição de temperatura, umidade e luminosidade atual
 - Alertas visuais quando valores excedem limites
+- Configuração remota de thresholds
+- Estatísticas das últimas 24 horas
 - Atualização automática a cada 5 segundos
+- Design responsivo (mobile-friendly)
 
-**Controle remoto:**
-- Inputs para configurar limites de temperatura, umidade e luz
-- Botão para salvar e aplicar novos parâmetros
-- Feedback visual de sucesso/erro
+**Tecnologias:**
+- HTML5 semântico
+- CSS3 com flexbox/grid
+- JavaScript ES6+ (fetch API)
+- Design responsivo
 
-**Estatísticas:**
-- Total de leituras nas últimas 24h
-- Média de temperatura, umidade e luminosidade
-- Contagem de alertas disparados
+### 6. Integração com ThingSpeak
 
-### 5. Deploy na Nuvem
+**Configuração do Canal:**
+- Field 1: Temperatura (°C)
+- Field 2: Umidade (%)
+- Field 3: Luminosidade (lux)
 
-**Hospedagem no Vercel:**
-- Repositório conectado ao GitHub
-- Deploy automático a cada push
-- URL pública acessível de qualquer lugar
-- API serverless escalável
+**Processo de Importação:**
+1. Backend faz requisição GET para ThingSpeak a cada 1 minuto
+2. Recebe JSON com até 100 últimas leituras
+3. Verifica duplicatas usando `created_at` único
+4. Insere novos dados no MongoDB
+5. Registra estatísticas no console
 
-**Configuração (`vercel.json`):**
-```json
+**Vantagens:**
+- Histórico persistente (não se perde)
+- Backup automático em nuvem
+- Análise de dados de longo prazo
+- Escalabilidade
+
+### 7. Persistência com MongoDB
+
+**Schema do Banco:**
+```javascript
 {
-  "version": 2,
-  "builds": [{"src": "server.js", "use": "@vercel/node"}],
-  "routes": [{"src": "/(.*)", "dest": "server.js"}]
+  created_at: Date,        // Timestamp (único)
+  device_id: String,       // Identificador do dispositivo
+  temperatura: Number,     // Temperatura em °C
+  umidade: Number,         // Umidade em %
+  iluminacao: Number,      // Luminosidade em lux
+  timestamps: true         // createdAt, updatedAt automáticos
 }
 ```
 
-### 6. Integração e Testes
+**Recursos:**
+- Índice único em `created_at` (evita duplicatas)
+- Validação automática de tipos
+- Queries otimizadas com agregações
+- Escalável para milhões de registros
 
-**Testes realizados:**
-1. Simulação no Wokwi com dados aleatórios
-2. Testes de API usando curl/Postman
-3. Verificação de fail-safe (desconectando WiFi)
-4. Validação do dashboard em diferentes navegadores
-5. Testes de carga na API
+### 8. Deploy
+
+**Opções de Deploy:**
+
+**Desenvolvimento Local:**
+- Backend: `http://localhost:4000`
+- Frontend: `http://localhost:3000`
+- MongoDB: `mongodb://localhost:27017`
+
+**Produção (Vercel):**
+- Frontend hospedado no Vercel
+- Backend pode ser hospedado em:
+  - Railway (suporta MongoDB)
+  - Render (free tier)
+  - Heroku
+  - DigitalOcean
+
+**MongoDB em Produção:**
+- MongoDB Atlas (free tier 512MB)
+- Conexão via string de conexão segura
+- Backup automático
 
 ---
 
 ## Decisões de Arquitetura
 
-### Por que Decisões Locais?
+### Por que Duas APIs Separadas?
+
+**Separação de Responsabilidades:**
+- **Backend (4000)**: Foco em dados e integração com ThingSpeak/MongoDB
+- **Frontend (3000)**: Foco em lógica de apresentação e servir dashboard
 
 **Vantagens:**
-- Latência < 100ms (resposta imediata)
-- Funciona offline
-- Não depende de infraestrutura externa
-- Mais seguro (sem exposição de dados críticos)
+- Escalabilidade independente
+- Manutenção mais simples
+- Possibilidade de múltiplos frontends
+- Melhor organização do código
+- Deploy independente
+
+### Por que MongoDB?
+
+**Vantagens sobre memória:**
+- Dados persistem após reinicialização
+- Escalável para milhões de registros
+- Queries complexas e agregações
+- Backup e recuperação
+- Suporte a índices
 
 **Casos de uso:**
-- Segurança crítica
-- Controle em tempo real
-- Ambientes sem conectividade confiável
+- Análise histórica de tendências
+- Relatórios de longo prazo
+- Machine learning sobre dados históricos
 
-### Por que Decisões em Nuvem?
+### Por que ThingSpeak?
 
 **Vantagens:**
-- Configuração remota sem reprogramação
-- Análise de dados históricos
-- Coordenação entre múltiplos dispositivos
-- Machine learning e otimização
-
-**Casos de uso:**
-- Monitoramento de longo prazo
-- Sistemas distribuídos
-- Análise preditiva
+- API simples e confiável
+- Visualizações prontas
+- MQTT disponível
+- Free tier generoso
+- Backup em nuvem
 
 ### Estratégia Híbrida (Nossa Escolha)
 
-Implementamos o melhor dos dois mundos:
-- **Autonomia:** Decisões críticas locais
-- **Flexibilidade:** Parâmetros ajustáveis remotamente
-- **Resiliência:** Fail-safe garante operação contínua
-- **Inteligência:** Análise de dados na nuvem
+Implementamos o melhor dos três mundos:
+- **Autonomia:** Decisões críticas locais no ESP32
+- **Persistência:** MongoDB para histórico confiável
+- **Backup:** ThingSpeak como fonte secundária
+- **Flexibilidade:** Thresholds ajustáveis remotamente
+- **Escalabilidade:** Arquitetura de microserviços
 
 ---
-
-## Aplicação no Projeto Integrador
-
-### Contexto: Totem Interativo em Paradas de Ônibus
-
-O PI consiste em totems instalados em paradas de ônibus que conectam usuários a serviços públicos locais. Este protótipo IoT demonstra conceitos diretamente aplicáveis:
-
-**Monitoramento Ambiental:**
-- Sensores no totem detectam temperatura e luminosidade
-- Proteção do hardware contra condições adversas
-- Exibição de informações climáticas para usuários
-
-**Decisões Locais no Totem:**
-- Ajustar brilho da tela conforme luz ambiente
-- Entrar em modo economia de energia quando apropriado
-- Continuar operando mesmo sem conexão
-
-**Decisões em Nuvem:**
-- Atualização de conteúdo e informações
-- Dashboard central para gerenciar todos os totems da cidade
-- Manutenção preditiva (alertas antes de falhas)
-- Estatísticas de uso e condições ambientais
-
-**Benefícios:**
-- Sistema robusto e confiável
-- Economia de energia
-- Manutenção preventiva
-- Melhor experiência do usuário
-
----
-
-## Como Executar o Projeto
-
-### Requisitos
-
-- Node.js 14+ instalado
-- Arduino IDE (para ESP32 físico)
-- Conta no Vercel (para deploy)
-- ESP32 e componentes (ou usar Wokwi)
-
-### Instalação Local
-
-```bash
-# Clonar repositório
-git clone https://github.com/amand4priscil4/Projeto.IOT.Temperatura.LED
-cd Projeto.IOT.Temperatura.LED
-
-# Instalar dependências
-npm install
-
-# Executar API
-npm start
-
-# Acessar dashboard
-# Abrir http://localhost:3000 no navegador
-```
-
-### Testar API
-
-```bash
-# Enviar dados de teste
-curl -X POST http://localhost:3000/api/sensor-data \
-  -H "Content-Type: application/json" \
-  -d '{"device_id":"teste","temperature":35,"humidity":30,"light":200}'
-
-# Buscar limites
-curl http://localhost:3000/api/thresholds
-
-# Ver dashboard
-curl http://localhost:3000/api/dashboard
-```
 
 ## Estrutura do Projeto
 
 ```
 Projeto.IOT.Temperatura.LED/
-├── esp32/
-│   └── main.ino              # Firmware do ESP32
-├── public/                   # Frontend (servido pela API)
-│   ├── dashboard.html        # Interface do usuário
-│   ├── script.js            # Lógica do dashboard
-│   └── styles.css           # Estilos
-├── docs/                     # Documentação extra
-├── server.js                 # API Backend
-├── package.json             # Dependências Node.js
-├── vercel.json              # Configuração do deploy
-└── README.md                # Este arquivo
-```
-
----
-
-## Tecnologias Utilizadas
-
-**Hardware:**
-- ESP32-C3 (Espressif)
-- DHT22 (ASAIR AM2302)
-- LDR (Light Dependent Resistor)
-
-**Firmware:**
-- Arduino Core para ESP32
-- WiFi.h (conectividade)
-- HTTPClient.h (requisições HTTP)
-- DHT.h (leitura do sensor)
-
-**Backend:**
-- Node.js 18
-- Express.js 4.18
-- CORS (Cross-Origin Resource Sharing)
-
-**Frontend:**
-- HTML5
-- CSS3 (design responsivo)
-- JavaScript ES6+
-- Chart.js (gráficos - preparado para expansão)
-
-**Ferramentas:**
-- Git/GitHub (controle de versão)
-- Wokwi (simulação)
-- Vercel (hosting)
-- VS Code / Codespaces (desenvolvimento)
-
----
-
-## Resultados e Aprendizados
-
-### Funcionamento Comprovado
-
-- Automação local funciona com latência < 100ms
-- Fail-safe testado (desconectando WiFi durante operação)
-- Dashboard atualiza em tempo real
-- Configuração remota funcional
-- Sistema escalável para múltiplos dispositivos
-
-### Principais Aprendizados
-
-1. **Autonomia é crítica:** Sistemas IoT não podem depender exclusivamente da nuvem
-2. **Flexibilidade importa:** Parâmetros ajustáveis facilitam manutenção
-3. **Simplicidade funciona:** Arquitetura clara é mais confiável
-4. **Edge + Cloud:** Abordagem híbrida oferece o melhor dos dois mundos
-
-### Métricas de Desempenho
-
-- Tempo de resposta local: < 100ms
-- Latência API (Vercel): ~500ms
-- Taxa de atualização: 5 segundos (dashboard), 10 segundos (telemetria)
-- Uptime: 99.9% (com fail-safe)
-
----
-
-## Referências
-
-- [Documentação ESP32](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/)
-- [Express.js Documentation](https://expressjs.com/)
-- [DHT Sensor Library](https://github.com/adafruit/DHT-sensor-library)
-- [Vercel Documentation](https://vercel.com/docs)
-- [Wokwi Simulator](https://docs.wokwi.com/)
-
----
-
-
-**Disciplina:** IOT
-**Instituição:** senac 
-**Ano:** 2025
+├── backend/
+│
