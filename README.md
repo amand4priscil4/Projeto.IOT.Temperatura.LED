@@ -7,7 +7,7 @@ Protótipo de automação IoT usando ESP32 com sensores DHT22 (temperatura/umida
 ## Links do Projeto
 
 - **Simulação Wokwi:** https://wokwi.com/projects/443357177542960129
-- **Dashboard Online:** [https://projeto-iot-temperatura-led.vercel.app/]
+- **Dashboard Online:** https://projeto-iot-temperatura-led.vercel.app/
 - **Repositório GitHub:** https://github.com/amand4priscil4/Projeto.IOT.Temperatura.LED
 
 ---
