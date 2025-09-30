@@ -373,5 +373,5 @@ Projeto.IOT.Temperatura.LED/
 
 
 **Disciplina:** IOT
-**Instituição:** [Sua Instituição]  
+**Instituição:** senac 
 **Ano:** 2025
