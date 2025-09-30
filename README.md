@@ -1,4 +1,3 @@
-# Projeto.IOT.Temperatura.LED
 # Sistema de Automação IoT - ESP32
 
 Protótipo de automação IoT usando ESP32 com sensores DHT22 (temperatura/umidade) e LDR (luminosidade), integrando regras de automação locais e em nuvem.
