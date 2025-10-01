@@ -2,31 +2,28 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-// Definição de pinos
-#define DHT_PIN 4      // Pino DATA do DHT11
-#define LED_PIN 5      // LED de alerta
-#define LDR_PIN 3      // LDR conectado ao ADC
+#define DHT_PIN 4
+#define LED_PIN 5
+#define LDR_PIN 3
 
-// Cria objeto DHTesp
 DHTesp dht;
 
-// Credenciais WiFi
-const char* ssid = "SENAC-Mesh";       // coloque sua rede WiFi
-const char* password = "09080706";  // coloque a senha
-
-// Chave e URL do ThingSpeak
-String apiKey = "0ZUXWK7UG4KHTV9E";  
+const char* ssid = "*******************";
+const char* password = "******************";
+String apiKey = "******************";  
 const char* server = "http://api.thingspeak.com/update";
+
+// Temporizadores
+unsigned long previousMillisSend = 0;
+unsigned long previousMillisSerial = 0;
+const long intervalSend = 20000;   // 20s para envio
+const long intervalSerial = 3000;  // 3s para mostrar no monitor
 
 void setup() {
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
-
-  // Inicializa DHT11
   dht.setup(DHT_PIN, DHTesp::DHT11);
-  delay(2000);
 
-  // Conecta WiFi
   WiFi.begin(ssid, password);
   Serial.print("Conectando ao WiFi...");
   while (WiFi.status() != WL_CONNECTED) {
@@ -42,37 +39,49 @@ void loop() {
   float hum = dht.getHumidity();
   int lightLevel = analogRead(LDR_PIN);
 
-  // Mostra valores no monitor serial
-  Serial.print("Temp: "); Serial.print(temp); Serial.print("°C | ");
-  Serial.print("Umidade: "); Serial.print(hum); Serial.print("% | ");
-  Serial.print("Luz: "); Serial.println(lightLevel);
-
-  // Lógica de alerta
+  // Lógica de alerta do LED
   if (temp > 30 || hum < 40 || lightLevel < 500) {
     digitalWrite(LED_PIN, HIGH);
-    Serial.println("🚨 ALERTA ATIVADO!");
   } else {
     digitalWrite(LED_PIN, LOW);
   }
 
-  // Envia dados para o ThingSpeak
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    String url = String(server) + "?api_key=" + apiKey +
-                 "&field1=" + String(temp) +
-                 "&field2=" + String(hum) +
-                 "&field3=" + String(lightLevel);
+  // Mostra dados no Serial a cada 3s
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillisSerial >= intervalSerial) {
+    previousMillisSerial = currentMillis;
 
-    http.begin(url);
-    int httpCode = http.GET();
-    if (httpCode > 0) {
-      Serial.println("✅ Dados enviados ao ThingSpeak!");
-    } else {
-      Serial.println("❌ Erro ao enviar dados.");
+    Serial.print("Temp: "); Serial.print(temp); Serial.print("°C | ");
+    Serial.print("Umidade: "); Serial.print(hum); Serial.print("% | ");
+    Serial.print("Luz: "); Serial.println(lightLevel);
+
+    if (digitalRead(LED_PIN)) {
+      Serial.println("🚨 ALERTA ATIVADO!");
     }
-    http.end();
+    Serial.println("-------------------------");
   }
 
-  Serial.println("-------------------------");
-  delay(20000); // ThingSpeak aceita 1 leitura a cada 15s (20s seguro)
+  // Envia dados para ThingSpeak a cada 20s
+  if (currentMillis - previousMillisSend >= intervalSend) {
+    previousMillisSend = currentMillis;
+
+    if (WiFi.status() == WL_CONNECTED) {
+      HTTPClient http;
+      String url = String(server) + "?api_key=" + apiKey +
+                   "&field1=" + String(temp) +
+                   "&field2=" + String(hum) +
+                   "&field3=" + String(lightLevel);
+
+      http.begin(url);
+      int httpCode = http.GET();
+      if (httpCode > 0) {
+        Serial.println("✅ Dados enviados ao ThingSpeak!");
+        Serial.println("-------------------------");
+      } else {
+        Serial.println("❌ Erro ao enviar dados.");
+        Serial.println("-------------------------");
+      }
+      http.end();
+    }
+  }
 }

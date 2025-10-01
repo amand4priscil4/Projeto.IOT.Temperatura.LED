@@ -1,19 +1,50 @@
+// ======================
 // Configuração da API
-const API_BASE = '/api';
+// ======================
+const API_BASE = 'https://backend-ino.onrender.com';
+
+// Conectar ao backend via WebSocket (Socket.IO)
+const socket = io(API_BASE);
 
 // Variáveis globais
 let sensorData = [];
 
-// Inicializar dashboard
+// ======================
+// Inicialização
+// ======================
 document.addEventListener('DOMContentLoaded', function() {
-    loadDashboard();
-    loadThresholds();
-    
-    // Atualizar a cada 5 segundos
-    setInterval(loadDashboard, 5000);
+    loadThresholds(); // thresholds iniciais ainda via fetch
 });
 
-// Carregar dados do dashboard
+// ======================
+// Eventos de WebSocket
+// ======================
+
+// Receber novos dados de sensores em tempo real
+socket.on("newData", (data) => {
+    updateSensorValues(data);
+    updateStatus(true);
+});
+
+// Receber thresholds do servidor
+socket.on("thresholds", (thresholds) => {
+    document.getElementById('tempInput').value = thresholds.temperature_max;
+    document.getElementById('humidityInput').value = thresholds.humidity_min;
+    document.getElementById('lightInput').value = thresholds.light_min;
+
+    document.getElementById('tempThreshold').textContent = thresholds.temperature_max;
+    document.getElementById('humidityThreshold').textContent = thresholds.humidity_min;
+    document.getElementById('lightThreshold').textContent = thresholds.light_min;
+});
+
+// Se houver erro de conexão
+socket.on("connect_error", () => updateStatus(false));
+
+// ======================
+// Funções principais
+// ======================
+
+// Carregar dados do dashboard (fallback/manual)
 async function loadDashboard() {
     try {
         const response = await fetch(`${API_BASE}/dashboard`);
@@ -56,7 +87,7 @@ function toggleAlert(elementId, show) {
     }
 }
 
-// Carregar thresholds
+// Carregar thresholds atuais
 async function loadThresholds() {
     try {
         const response = await fetch(`${API_BASE}/thresholds`);
@@ -75,7 +106,7 @@ async function loadThresholds() {
     }
 }
 
-// Atualizar thresholds
+// Atualizar thresholds no backend
 async function updateThresholds() {
     const newThresholds = {
         temperature_max: parseFloat(document.getElementById('tempInput').value),
