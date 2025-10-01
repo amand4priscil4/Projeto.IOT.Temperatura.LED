@@ -1,5 +1,5 @@
 // Configuração da API
-const API_BASE = 'https://backend-ino.onrender.com';
+const API_BASE = 'https://backend-ino.onrender.com/api';
 
 // Variáveis globais
 let sensorData = [];
