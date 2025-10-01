@@ -2,8 +2,15 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const axios = require('axios');
+const http = require('http');           // Para criar servidor http
+const { Server } = require('socket.io'); // Para WebSocket
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*" } // permitir conexões de qualquer origem
+});
+
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -42,6 +49,10 @@ app.post('/api/sensor-data', (req, res) => {
     }
 
     console.log('Dados recebidos:', newData);
+
+    // 🔴 Enviar em tempo real para todos os clientes conectados
+    io.emit('sensor-update', newData);
+
     res.json({ success: true, data: newData });
 
   } catch (error) {
@@ -54,7 +65,6 @@ app.get('/api/sensor-data', async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
 
   try {
-    // Buscar dados externos
     const response = await axios.get('https://backend-ino.onrender.com/leituras');
     const externalData = response.data.map(d => ({
       id: d._id,
@@ -67,7 +77,6 @@ app.get('/api/sensor-data', async (req, res) => {
         d.iluminacao < thresholds.light_min
     }));
 
-    // Combinar dados internos + externos
     const combinedData = [...sensorData, ...externalData].slice(-limit).reverse();
 
     res.json({
@@ -78,7 +87,6 @@ app.get('/api/sensor-data', async (req, res) => {
 
   } catch (error) {
     console.error('Erro ao buscar dados externos:', error.message);
-    // fallback apenas dados internos
     const recentData = sensorData.slice(-limit).reverse();
     res.json({
       success: true,
@@ -87,7 +95,6 @@ app.get('/api/sensor-data', async (req, res) => {
     });
   }
 });
-
 
 // Endpoint para buscar thresholds (GET)
 app.get('/api/thresholds', (req, res) => {
@@ -106,6 +113,7 @@ app.put('/api/thresholds', (req, res) => {
   res.json({ success: true, thresholds });
 });
 
+// Endpoint para dashboard
 app.get('/api/dashboard', async (req, res) => {
   try {
     const response = await axios.get('https://backend-ino.onrender.com/leituras');
@@ -148,7 +156,6 @@ app.get('/api/dashboard', async (req, res) => {
 
   } catch (error) {
     console.error('Erro ao buscar dados externos para dashboard:', error.message);
-    // fallback apenas dados internos
     const latest = sensorData[sensorData.length - 1];
     const last24h = sensorData.filter(d => {
       const dataTime = new Date(d.timestamp);
@@ -175,7 +182,6 @@ app.get('/api/dashboard', async (req, res) => {
   }
 });
 
-
 // Endpoint de status
 app.get('/api/status', (req, res) => {
   res.json({
@@ -190,8 +196,20 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-// Iniciar servidor
-app.listen(PORT, () => {
+// 🔴 Conexão Socket.IO
+io.on('connection', socket => {
+  console.log('Cliente conectado:', socket.id);
+
+  // Envia os últimos dados ao conectar
+  socket.emit('initial-data', sensorData.slice(-50));
+
+  socket.on('disconnect', () => {
+    console.log('Cliente desconectado:', socket.id);
+  });
+});
+
+// Iniciar servidor com WebSocket
+server.listen(PORT, () => {
   console.log(`API rodando em http://localhost:${PORT}`);
   console.log(`Dashboard em http://localhost:${PORT}`);
 });
